@@ -88,7 +88,36 @@ To manually install just the wake extra later:
 uv pip install --python .venv/bin/python ".[wake]"
 ```
 
-## 11. Running inside Docker Desktop's WSL distro
+## 11. Ollama is installed on Windows, not WSL
+
+`install.sh` step 3/11 auto-detects an existing Ollama in this order:
+
+1. `JARVIS_SKIP_OLLAMA_INSTALL=1` → installer leaves Ollama alone entirely.
+2. Daemon already reachable on `$OLLAMA_HOST` (default `127.0.0.1:11434`).
+3. `ollama` (Linux binary) on `PATH`.
+4. `ollama.exe` on `PATH`, or a Windows install under
+   `/mnt/c/Users/*/AppData/Local/Programs/Ollama/ollama.exe`,
+   `/mnt/c/Users/*/OneDrive*/AppData/Local/Programs/Ollama/ollama.exe`,
+   or `/mnt/c/Program*Files*/Ollama/ollama.exe`.
+5. Otherwise → install native Linux Ollama.
+
+When a Windows-side install is detected, the installer:
+- Tries the WSL gateway IP (`ip route show default | awk '/default/ {print $3}'`)
+  as the host and sets `OLLAMA_HOST=http://<gateway>:11434` if reachable.
+- Falls back to `127.0.0.1:11434` if you have WSL mirrored networking enabled.
+- All subsequent `ollama …` invocations in the installer go through an
+  `ollama_cli` wrapper that calls `ollama.exe` if the Linux binary is missing.
+
+If neither path works, start Ollama on Windows (Start menu → Ollama) and either:
+- Enable mirrored networking in `%USERPROFILE%\.wslconfig`:
+  ```ini
+  [wsl2]
+  networkingMode=mirrored
+  ```
+  then `wsl --shutdown` and reopen, or
+- Hard-code `OLLAMA_HOST=http://<windows-ip>:11434` in `.env`.
+
+## 12. Running inside Docker Desktop's WSL distro
 
 If `df -h ~` reports only ~37 MB and `nvidia-smi` is missing, you're inside
 Docker Desktop's bundled Alpine distro (`docker-desktop` or `docker-desktop-data`).
