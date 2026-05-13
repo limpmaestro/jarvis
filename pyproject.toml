@@ -25,10 +25,9 @@ dependencies = [
     "sounddevice>=0.4.7",
     "soundfile>=0.12.1",
     "numpy>=1.26",
-    # STT
+    # STT (wake-word lives in optional [wake] extra; tflite-runtime has no cp312 wheels)
     "faster-whisper>=1.0.3",
     "silero-vad>=5.1",
-    "openwakeword>=0.6.0",
     # TTS
     "piper-tts>=1.2.0; platform_system != 'Windows'",
     # Memory
@@ -56,6 +55,12 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-mock>=3.14",
     "respx>=0.21",
+]
+wake = [
+    # Optional wake-word detector. openwakeword pulls tflite-runtime which only
+    # ships wheels for Python 3.11 (no cp312 wheels). install.sh installs this
+    # extra best-effort; if it fails, push-to-talk on JARVIS_PTT_HOTKEY remains.
+    "openwakeword>=0.6.0",
 ]
 bridge = [
     # Installed inside the Windows-side Python that builds jarvis-bridge.exe.
