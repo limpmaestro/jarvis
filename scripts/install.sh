@@ -35,7 +35,7 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq \
     build-essential python3-dev portaudio19-dev libportaudio2 \
     ffmpeg libegl1 libgl1 libglib2.0-0 \
-    age jq curl git ripgrep >/dev/null
+    age jq curl git ripgrep zstd >/dev/null
 ok "system deps installed"
 
 # ====================================================================== #
