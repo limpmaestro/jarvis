@@ -71,3 +71,32 @@ Get-Process jarvis-bridge -ErrorAction SilentlyContinue
 netstat -an | findstr 48219
 ```
 If not running, start it manually or check Task Scheduler → "JarvisBridge".
+
+## 10. `tflite-runtime` install fails ("no wheels for cp312")
+
+`openwakeword` depends on `tflite-runtime`, which only publishes wheels for
+Python 3.11 (no cp312, sometimes no cp313). This is why `install.sh` forces
+the venv to Python 3.11 via `uv python install 3.11` + `uv venv --python 3.11`.
+
+If you're seeing this error:
+- Re-run `./scripts/install.sh` from a fresh clone — it will rebuild the venv on 3.11.
+- Or, run wake-word-less: the [wake] extra is best-effort. Push-to-talk on
+  `$JARVIS_PTT_HOTKEY` (default `F8`) continues to work without it.
+
+To manually install just the wake extra later:
+```bash
+uv pip install --python .venv/bin/python ".[wake]"
+```
+
+## 11. Running inside Docker Desktop's WSL distro
+
+If `df -h ~` reports only ~37 MB and `nvidia-smi` is missing, you're inside
+Docker Desktop's bundled Alpine distro (`docker-desktop` or `docker-desktop-data`).
+Those distros are not meant to run user workloads. Install a proper Ubuntu:
+
+```powershell
+wsl --install -d Ubuntu-22.04
+wsl --set-default Ubuntu-22.04
+```
+
+Then clone Jarvis into the new distro's home directory and re-run `install.sh`.

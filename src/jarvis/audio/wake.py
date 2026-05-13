@@ -20,15 +20,24 @@ class WakeWordDetector:
     def __init__(self, name: str | None = None) -> None:
         self._name = name or get_settings().wake_word
         self._model = None
+        self._unavailable = False
 
     def enabled(self) -> bool:
-        return bool(self._name)
+        return bool(self._name) and not self._unavailable
 
     def _ensure(self) -> None:
-        if self._model is not None:
+        if self._model is not None or self._unavailable:
             return
-        from openwakeword.model import Model  # type: ignore[import-untyped]
-
+        try:
+            from openwakeword.model import Model  # type: ignore[import-untyped]
+        except ImportError as exc:
+            log.warning(
+                "wake_unavailable",
+                reason=str(exc),
+                hint="Install the [wake] extra: uv pip install '.[wake]' (Python 3.11 required)",
+            )
+            self._unavailable = True
+            return
         log.info("wake_loading", model=self._name)
         self._model = Model(wakeword_models=[self._name])
 
@@ -37,6 +46,8 @@ class WakeWordDetector:
         if not self.enabled():
             return {}
         self._ensure()
+        if self._model is None:
+            return {}
         if pcm.dtype != np.int16:
             pcm = (pcm * 32767.0).astype(np.int16)
         return dict(self._model.predict(pcm))

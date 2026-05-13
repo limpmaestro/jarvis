@@ -60,8 +60,24 @@ if ! command -v uv &>/dev/null; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$HOME/.local/bin:$PATH"
 fi
-uv sync
-ok "Python venv ready at .venv/"
+
+# Force Python 3.11 — pyproject.toml caps at <3.13 and several deps
+# (tflite-runtime via openwakeword, some chromadb wheels) have no cp312 wheels.
+# uv downloads a managed Python interpreter if the system one is wrong.
+uv python install 3.11 >/dev/null
+uv venv --python 3.11 .venv
+
+# Core sync (no [wake] extra — tflite-runtime has no cp312 wheels and even on
+# 3.11 it sometimes fails on aarch64/odd glibc; we try it best-effort below).
+uv sync --python 3.11
+ok "Python venv ready at .venv/ (Python 3.11)"
+
+# Wake-word is optional. Try to install; tolerate failure.
+if uv pip install --python .venv/bin/python "openwakeword>=0.6.0" 2>/dev/null; then
+    ok "wake-word ([wake] extra) installed"
+else
+    warn "[wake] extra failed to install — push-to-talk (\$JARVIS_PTT_HOTKEY, default F8) still works"
+fi
 
 # ====================================================================== #
 step "5/11" "Pulling Ollama models"
