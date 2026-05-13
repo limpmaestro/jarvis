@@ -39,20 +39,93 @@ sudo apt-get install -y -qq \
 ok "system deps installed"
 
 # ====================================================================== #
-step "3/11" "Ensuring Ollama is installed"
-if ! command -v ollama &>/dev/null; then
+step "3/11" "Ensuring Ollama is reachable"
+
+# Resolve where the Ollama daemon should be reachable.
+# Order: explicit OLLAMA_HOST env > WSL loopback default.
+OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
+export OLLAMA_HOST
+
+# Globally-usable Ollama CLI wrapper. Prefers native Linux binary, falls
+# back to Windows ollama.exe (e.g. user installed Ollama on Windows, with
+# the install dir under %LOCALAPPDATA% or a OneDrive-redirected folder).
+find_windows_ollama_exe() {
+    if command -v ollama.exe &>/dev/null; then
+        command -v ollama.exe
+        return 0
+    fi
+    local candidate
+    for candidate in \
+        /mnt/c/Users/*/AppData/Local/Programs/Ollama/ollama.exe \
+        /mnt/c/Users/*/OneDrive*/AppData/Local/Programs/Ollama/ollama.exe \
+        /mnt/c/Program*Files*/Ollama/ollama.exe; do
+        if [ -x "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+OLLAMA_WIN_EXE=""
+OLLAMA_MODE=""   # one of: skip | reachable | linux | windows | install
+
+if [[ "${JARVIS_SKIP_OLLAMA_INSTALL:-}" == "1" ]]; then
+    OLLAMA_MODE="skip"
+    warn "JARVIS_SKIP_OLLAMA_INSTALL=1 — not touching Ollama"
+elif curl -sf --max-time 2 "$OLLAMA_HOST" >/dev/null 2>&1; then
+    OLLAMA_MODE="reachable"
+    ok "ollama daemon already reachable at $OLLAMA_HOST"
+elif command -v ollama &>/dev/null; then
+    OLLAMA_MODE="linux"
+    ok "ollama (linux) already installed: $(ollama --version 2>&1 | head -1)"
+elif OLLAMA_WIN_EXE=$(find_windows_ollama_exe); then
+    OLLAMA_MODE="windows"
+    ok "found Windows-side Ollama: $OLLAMA_WIN_EXE"
+    # Try the WSL gateway as the daemon host (works in default NAT mode).
+    WIN_HOST_IP=$(ip route show default 2>/dev/null | awk '/default/ {print $3}' | head -1)
+    if [[ -n "$WIN_HOST_IP" ]] && curl -sf --max-time 2 "http://${WIN_HOST_IP}:11434" >/dev/null 2>&1; then
+        OLLAMA_HOST="http://${WIN_HOST_IP}:11434"
+        export OLLAMA_HOST
+        ok "routing to Windows Ollama at $OLLAMA_HOST"
+    elif curl -sf --max-time 2 http://127.0.0.1:11434 >/dev/null 2>&1; then
+        # WSL mirrored networking mode (Windows 11 22H2+ with networkingMode=mirrored).
+        ok "Windows Ollama reachable on loopback (mirrored networking)"
+    else
+        warn "Windows Ollama exe found but daemon not reachable from WSL."
+        warn "Start Ollama on Windows (Start menu → Ollama) OR"
+        warn "set OLLAMA_HOST=http://<windows-ip>:11434 in your shell, then re-run."
+        warn "As a fallback, you can also enable WSL mirrored networking in .wslconfig."
+    fi
+else
+    OLLAMA_MODE="install"
+    warn "ollama not found anywhere — installing native Linux build"
     curl -fsSL https://ollama.com/install.sh | sh
     ok "ollama installed"
-else
-    ok "ollama already installed: $(ollama --version 2>&1)"
 fi
 
-# Start ollama serve in the background if not running.
-if ! curl -sf http://127.0.0.1:11434/ >/dev/null 2>&1; then
-    warn "Starting 'ollama serve' in the background..."
-    nohup ollama serve >/dev/null 2>&1 &
-    sleep 3
+# Start the Linux daemon if we just installed it (or if it's installed but not running).
+if [[ "$OLLAMA_MODE" == "linux" || "$OLLAMA_MODE" == "install" ]]; then
+    if ! curl -sf --max-time 2 "$OLLAMA_HOST" >/dev/null 2>&1; then
+        warn "Starting 'ollama serve' in the background..."
+        nohup ollama serve >/dev/null 2>&1 &
+        sleep 3
+    fi
 fi
+
+# Thin CLI wrapper used by later steps. Routes to whichever ollama we found.
+ollama_cli() {
+    if command -v ollama &>/dev/null; then
+        ollama "$@"
+    elif [[ -n "$OLLAMA_WIN_EXE" ]]; then
+        "$OLLAMA_WIN_EXE" "$@"
+    elif command -v ollama.exe &>/dev/null; then
+        ollama.exe "$@"
+    else
+        warn "ollama CLI not on PATH — skipping: ollama $*"
+        return 1
+    fi
+}
 
 # ====================================================================== #
 step "4/11" "Setting up Python environment (uv)"
@@ -81,13 +154,13 @@ fi
 
 # ====================================================================== #
 step "5/11" "Pulling Ollama models"
-ollama pull qwen2.5:14b-instruct-q4_K_M || warn "Pull failed — check VRAM / network"
-ollama pull nomic-embed-text:v1.5 || warn "Embed model pull failed"
+ollama_cli pull qwen2.5:14b-instruct-q4_K_M || warn "Pull failed — check VRAM / network"
+ollama_cli pull nomic-embed-text:v1.5 || warn "Embed model pull failed"
 ok "models pulled"
 
 # ====================================================================== #
 step "6/11" "Creating Jarvis Modelfile"
-ollama create jarvis -f models/Jarvis.Modelfile 2>/dev/null && ok "jarvis model created" || warn "jarvis model create failed — continuing"
+ollama_cli create jarvis -f models/Jarvis.Modelfile 2>/dev/null && ok "jarvis model created" || warn "jarvis model create failed — continuing"
 
 # ====================================================================== #
 step "7/11" "Downloading Piper TTS voices"
