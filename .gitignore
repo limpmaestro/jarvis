@@ -1,5 +1,46 @@
-.venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
 .pytest_cache/
+.mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Virtualenvs
+.venv/
+venv/
+.python-version
+
+# uv
+uv.lock
+
+# Env files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jarvis runtime
+~/.jarvis/
+state/
+*.age
+*.pem
+*.key
+assets/voices/*.onnx
+assets/voices/*.onnx.json
+
+# Test artifacts
+recordings/
+screenshots/

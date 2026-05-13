@@ -1,0 +1,9 @@
+fastapi>=0.111
+uvicorn>=0.30
+pyautogui>=0.9.54
+pywinauto>=0.6.8
+pygetwindow>=0.0.9
+mss>=9.0
+psutil>=6.0
+pillow>=10.3
+pydantic>=2.7

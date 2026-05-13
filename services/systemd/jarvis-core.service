@@ -1,0 +1,18 @@
+[Unit]
+Description=Jarvis Core — local AI assistant
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+ExecStart=%h/jarvis/.venv/bin/jarvis-core
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+WorkingDirectory=%h/jarvis
+Environment=PATH=%h/jarvis/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=OLLAMA_HOST=http://127.0.0.1:11434
+
+[Install]
+WantedBy=default.target

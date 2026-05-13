@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq portaudio19-dev libegl1 libgl1
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Sync deps
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv sync --extra dev
+
+      - name: Ruff
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv run ruff check src tests
+
+      - name: Black
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv run black --check src tests
+
+      - name: Pytest
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv run pytest -ra
