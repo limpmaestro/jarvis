@@ -51,7 +51,7 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq \
     build-essential python3-dev portaudio19-dev libportaudio2 \
     ffmpeg libegl1 libgl1 libglib2.0-0 \
-    age jq curl git ripgrep zstd >/dev/null
+    age jq curl git ripgrep zstd alsa-utils >/dev/null
 ok "system deps installed"
 
 # ====================================================================== #
@@ -116,7 +116,9 @@ elif OLLAMA_WIN_EXE=$(find_windows_ollama_exe); then
 else
     OLLAMA_MODE="install"
     warn "ollama not found anywhere — installing native Linux build"
-    curl -fsSL https://ollama.com/install.sh | sh
+    # --retry-all-errors covers transient SSL EOF / connection-reset mid-stream.
+    curl --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 30 -fsSL \
+        https://ollama.com/install.sh | sh
     ok "ollama installed"
 fi
 
@@ -146,7 +148,8 @@ ollama_cli() {
 # ====================================================================== #
 step "4/11" "Setting up Python environment (uv)"
 if ! command -v uv &>/dev/null; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    curl --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 30 -LsSf \
+        https://astral.sh/uv/install.sh | sh
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
@@ -190,9 +193,11 @@ download_voice() {
     local base_url="https://huggingface.co/rhasspy/piper-voices/resolve/main/${lang}/${name}/${quality}"
     if [ ! -f "$VOICES_DIR/${name}-${quality}.onnx" ]; then
         echo "  Downloading ${name}-${quality}..."
-        curl -fsSL -o "$VOICES_DIR/${name}-${quality}.onnx" \
+        curl --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 30 -fsSL \
+            -o "$VOICES_DIR/${name}-${quality}.onnx" \
             "${base_url}/${name}-${quality}.onnx" 2>/dev/null || warn "download failed: ${name}-${quality}.onnx"
-        curl -fsSL -o "$VOICES_DIR/${name}-${quality}.onnx.json" \
+        curl --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 30 -fsSL \
+            -o "$VOICES_DIR/${name}-${quality}.onnx.json" \
             "${base_url}/${name}-${quality}.onnx.json" 2>/dev/null || true
     fi
 }
