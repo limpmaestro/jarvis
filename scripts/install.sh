@@ -23,6 +23,22 @@ confirm() {
     [[ "$ans" =~ ^[Yy] ]] || { echo "Aborted."; exit 1; }
 }
 
+# Bail out early if we're inside Docker Desktop's bundled Alpine distros
+# (~37 MB free disk, no GPU passthrough, no apt). audit.sh also detects this
+# but the user might skip running it — block here too so the failure is loud.
+. /etc/os-release 2>/dev/null || true
+if [[ "${ID:-}" == "alpine" ]] || [[ "$(hostname 2>/dev/null)" =~ ^docker-desktop ]]; then
+    fail "Detected Docker Desktop's WSL distro. Install a real Ubuntu distro first:\n    wsl --install -d Ubuntu-22.04 && wsl --set-default Ubuntu-22.04\nThen clone the repo inside that distro and re-run ./scripts/install.sh."
+fi
+
+# Detect whether systemctl --user actually works on this WSL distro.
+# Default Ubuntu-on-WSL ships without systemd unless /etc/wsl.conf has
+# [boot] systemd=true and the user has done `wsl --shutdown` once.
+SYSTEMD_USER_OK=0
+if command -v systemctl &>/dev/null && systemctl --user is-system-running &>/dev/null; then
+    SYSTEMD_USER_OK=1
+fi
+
 # ====================================================================== #
 step "1/11" "Running environment audit"
 bash scripts/audit.sh || true
@@ -206,9 +222,20 @@ step "9/11" "Installing systemd user service"
 SVC_DIR="${HOME}/.config/systemd/user"
 mkdir -p "$SVC_DIR"
 cp services/systemd/jarvis-core.service "$SVC_DIR/"
-systemctl --user daemon-reload
-systemctl --user enable jarvis-core.service
-ok "jarvis-core.service enabled"
+
+if [[ "$SYSTEMD_USER_OK" == "1" ]]; then
+    systemctl --user daemon-reload
+    systemctl --user enable jarvis-core.service
+    ok "jarvis-core.service enabled (systemd --user)"
+else
+    warn "systemctl --user is not functional on this WSL distro."
+    warn "Unit file copied to $SVC_DIR/ but not enabled."
+    warn "To enable systemd in WSL, add this to /etc/wsl.conf and run 'wsl --shutdown':"
+    warn "    [boot]"
+    warn "    systemd=true"
+    warn "Then re-run ./scripts/install.sh and it will enable the service."
+    warn "As a fallback, install.sh will launch jarvis-core via nohup in step 11/11."
+fi
 
 # ====================================================================== #
 step "10/11" "Setting up Windows bridge (cross-call)"
@@ -234,9 +261,27 @@ fi
 
 # ====================================================================== #
 step "11/11" "Starting Jarvis core"
-systemctl --user start jarvis-core.service && ok "jarvis-core started" || warn "start failed (check: journalctl --user -u jarvis-core)"
-echo ""
-journalctl --user -u jarvis-core --no-pager -n 10 2>/dev/null || true
+if [[ "$SYSTEMD_USER_OK" == "1" ]]; then
+    systemctl --user start jarvis-core.service && ok "jarvis-core started" || warn "start failed (check: journalctl --user -u jarvis-core)"
+    echo ""
+    journalctl --user -u jarvis-core --no-pager -n 10 2>/dev/null || true
+else
+    # No systemd — use a nohup-style fallback so the user can still talk to Jarvis.
+    # Re-launches are manual; for autostart, enable systemd in wsl.conf (see step 9/11).
+    LOG_FILE="${HOME}/.jarvis/state/jarvis-core.log"
+    mkdir -p "$(dirname "$LOG_FILE")"
+    if pgrep -f 'jarvis-core' >/dev/null 2>&1; then
+        ok "jarvis-core already running (pid: $(pgrep -f 'jarvis-core' | head -1))"
+    else
+        nohup .venv/bin/jarvis-core >>"$LOG_FILE" 2>&1 &
+        sleep 1
+        if pgrep -f 'jarvis-core' >/dev/null 2>&1; then
+            ok "jarvis-core launched via nohup (log: $LOG_FILE, pid: $(pgrep -f 'jarvis-core' | head -1))"
+        else
+            warn "jarvis-core failed to start (see $LOG_FILE)"
+        fi
+    fi
+fi
 
 echo ""
 printf "${BOLD}${GREEN}Installation complete!${NC}\n"

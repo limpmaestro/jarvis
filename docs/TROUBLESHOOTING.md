@@ -129,3 +129,35 @@ wsl --set-default Ubuntu-22.04
 ```
 
 Then clone Jarvis into the new distro's home directory and re-run `install.sh`.
+
+Both `audit.sh` and `install.sh` now detect this distro (ID=alpine or
+hostname matches `docker-desktop*`) and abort with a clear message before
+touching anything, so you can't accidentally try to install into it.
+
+## 13. `systemctl --user`: "Failed to connect to bus" on WSL
+
+WSL distros do not run systemd by default. `install.sh` step 9/11 detects
+this (`systemctl --user is-system-running` returns non-zero) and falls back
+to launching `jarvis-core` via `nohup` in step 11/11. That works for the
+current session, but Jarvis will not autostart on next login.
+
+To get the full systemd experience (autostart, `journalctl --user -u jarvis-core`):
+
+1. Edit `/etc/wsl.conf` (create it if missing) and add:
+   ```ini
+   [boot]
+   systemd=true
+   ```
+2. From Windows PowerShell:
+   ```powershell
+   wsl --shutdown
+   ```
+3. Reopen your WSL distro. Verify systemd is running:
+   ```bash
+   systemctl is-system-running   # expect: running (or degraded)
+   ```
+4. Re-run `./scripts/install.sh`. Step 9/11 will now enable the user service.
+
+If you don't want systemd, the nohup fallback is fine — you'll just have to
+run `~/jarvis/.venv/bin/jarvis-core &` manually after each WSL boot
+(or add it to your shell rc / wsl.conf `boot.command`).

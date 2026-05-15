@@ -28,6 +28,17 @@ fi
 . /etc/os-release 2>/dev/null || true
 ok "Distro: ${PRETTY_NAME:-unknown}"
 
+# Bail out early if we're inside Docker Desktop's bundled Alpine distros.
+# Those have ~37 MB free disk, no GPU passthrough, no apt — not a valid target.
+if [[ "${ID:-}" == "alpine" ]] || [[ "$(hostname 2>/dev/null)" =~ ^docker-desktop ]]; then
+    fail "Detected Docker Desktop's WSL distro ('${ID:-?}', host '$(hostname 2>/dev/null)')."
+    fail "This distro is not a valid target for Jarvis."
+    fail "Install a real Ubuntu distro from PowerShell (admin):"
+    fail "    wsl --install -d Ubuntu-22.04 && wsl --set-default Ubuntu-22.04"
+    fail "Then clone the repo inside that distro and re-run ./scripts/audit.sh."
+    exit 2
+fi
+
 # ====================================================================== #
 hdr "Hardware / GPU"
 
